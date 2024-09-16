@@ -10,5 +10,13 @@ out/
 # Docs
 docs/
 
+
 # Dotenv file
 .env
+
+.keystore
+
+# zksync
+
+zkout/
+signature.txt

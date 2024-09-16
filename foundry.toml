@@ -4,9 +4,10 @@ out = "out"
 libs = ["lib"]
 
 remappings = [
-    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-    "forge-std=lib/forge-std/src/",
-    "murky=lib/murky",
+    'murky/=lib/murky/',
+    '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/',
+    'foundry-devops/=lib/foundry-devops',
+    'forge-std/=lib/forge-std/src/',
 ]
 
 fs_permissions = [

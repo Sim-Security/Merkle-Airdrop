@@ -5,8 +5,10 @@ pragma solidity ^0.8.24;
 import {Test, console} from "forge-std/Test.sol";
 import {MerkleAirdrop} from "../src/MerkleAirdrop.sol";
 import {SimToken} from "../src/SimToken.sol";
+import {ZkSyncChainChecker} from "lib/foundry-devops/src/ZkSyncChainChecker.sol";
+import {DeployMerkleAirdrop} from "script/DeployMerkleAirdrop.s.sol";
 
-contract MerkleAirdropTest is Test {
+contract MerkleAirdropTest is ZkSyncChainChecker, Test {
     MerkleAirdrop public airdrop;
     SimToken public token;
 
@@ -17,28 +19,39 @@ contract MerkleAirdropTest is Test {
     bytes32 proofTwo = 0xe5ebd1e1b5a5478a944ecab36a9a954ac3b6b8216875f6524caa7a1d87096576;
     bytes32[] public PROOF = [proofOne, proofTwo];
 
+    address public gasPayer;
     address user;
     uint256 userPrivKey;
 
     function setUp() public {
-        token = new SimToken();
-        airdrop = new MerkleAirdrop(ROOT, token);
-        token.mint(token.owner(), AMOUNT_TO_SEND);
-        token.transfer(address(airdrop), AMOUNT_TO_SEND);
+        if (!isZkSyncChain()) {
+            //deploy with the script
+            DeployMerkleAirdrop deployer = new DeployMerkleAirdrop();
+            (airdrop, token) = deployer.deployMerkleAirdrop();
+        } else {
+            token = new SimToken();
+            airdrop = new MerkleAirdrop(ROOT, token);
+            token.mint(token.owner(), AMOUNT_TO_SEND);
+            token.transfer(address(airdrop), AMOUNT_TO_SEND);
+        }
         (user, userPrivKey) = makeAddrAndKey("user");
+        gasPayer = makeAddr("gasPayer");
     }
-
 
     function testUsersCanClaim() public {
         // console.log("user address: ", user);
         uint256 startingBalance = token.balanceOf(user);
-
-        vm.prank(user);
-        airdrop.claim(user, AMOUNT_TO_CLAIM, PROOF);
+        bytes32 digest = airdrop.getMessageHash(user, AMOUNT_TO_CLAIM);
+        // sign a message 
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivKey, digest);
+        
+        
+        // gasPayer calls claim uysing the signed message
+        vm.prank(gasPayer);
+        airdrop.claim(user, AMOUNT_TO_CLAIM, PROOF, v, r, s);
 
         uint256 endingBalance = token.balanceOf(user);
         console.log("ending balance: ", endingBalance);
         assertEq(endingBalance, startingBalance + AMOUNT_TO_CLAIM);
     }
-    
 }

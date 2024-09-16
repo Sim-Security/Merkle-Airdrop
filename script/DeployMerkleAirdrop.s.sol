@@ -16,7 +16,7 @@ contract DeployMerkleAirdrop is Script {
         vm.startBroadcast();
         SimToken simToken = new SimToken();
         MerkleAirdrop airdrop = new MerkleAirdrop(ROOT, IERC20(simToken));
-        // Send Bagel tokens -> Merkle Air Drop contract
+        // Send Sim tokens -> Merkle Air Drop contract
         simToken.mint(simToken.owner(), AMOUNT_TO_TRANSFER);
         IERC20(simToken).transfer(address(airdrop), AMOUNT_TO_TRANSFER);
         vm.stopBroadcast();

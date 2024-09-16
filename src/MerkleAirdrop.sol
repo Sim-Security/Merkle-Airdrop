@@ -6,8 +6,10 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-contract MerkleAirdrop {
+contract MerkleAirdrop is EIP712 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -18,6 +20,7 @@ contract MerkleAirdrop {
     //////////////////////////////////////////////////////////////*/
     error MerkleAirdrop__InvalidProof();
     error MerkleAirdrop__AlreadyClaimed();
+    error MerkleAirdrop__InvalidSignature();
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -31,14 +34,23 @@ contract MerkleAirdrop {
     IERC20 private immutable i_airdropToken;
     mapping(address claimer => bool claimed) private s_hasClaimed;
 
-    constructor(bytes32 merkleRoot, IERC20 airdropToken) {
+    bytes32 private constant MESSAGE_TYPEHASH = keccak256("AirdropClaim(address account,uint256 amount)");
+
+    struct AirdropClaim {
+        address account;
+        uint256 amount;
+    }
+
+    constructor(bytes32 merkleRoot, IERC20 airdropToken) EIP712("MerkleAirdrop", "1") {
         // set the merkle root
         // set the airdrop token
         i_merkleRoot = merkleRoot;
         i_airdropToken = airdropToken;
     }
 
-    function claim(address account, uint256 amount, bytes32[] calldata merkleProof) external {
+    function claim(address account, uint256 amount, bytes32[] calldata merkleProof, uint8 v, bytes32 r, bytes32 s)
+        external
+    {
         // check if the account is in the list
         // check if the account has already claimed
         // check if the amount is greater than 0
@@ -48,6 +60,10 @@ contract MerkleAirdrop {
         if (s_hasClaimed[account]) {
             revert MerkleAirdrop__AlreadyClaimed();
         }
+        //check the signature
+        if (!_isValidSignature(account, getMessageHash(account, amount), v, r, s)) {
+            revert MerkleAirdrop__InvalidSignature();
+        }
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(account, amount))));
         if (!MerkleProof.verify(merkleProof, i_merkleRoot, leaf)) {
             revert MerkleAirdrop__InvalidProof();
@@ -55,6 +71,11 @@ contract MerkleAirdrop {
         s_hasClaimed[account] = true;
         emit Claim(account, amount);
         i_airdropToken.safeTransfer(account, amount);
+    }
+
+    function getMessageHash(address account, uint256 amount) public view returns (bytes32) {
+        return
+            _hashTypedDataV4(keccak256(abi.encode(MESSAGE_TYPEHASH, AirdropClaim({account: account, amount: amount}))));
     }
 
     function getMerkleRoot() external view returns (bytes32) {
@@ -67,5 +88,10 @@ contract MerkleAirdrop {
 
     function getHasClaimed(address account) external view returns (bool) {
         return s_hasClaimed[account];
+    }
+
+    function _isValidSignature(address account, bytes32 digest, uint8 v, bytes32 r, bytes32 s) internal pure returns (bool) {
+        (address actualSigner, , ) = ECDSA.tryRecover(digest, v, r, s);
+        return actualSigner == account;
     }
 }
